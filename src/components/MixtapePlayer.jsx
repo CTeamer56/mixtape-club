@@ -45,10 +45,11 @@ class MixtapePlayer extends React.Component {
             oscillator: '',
             stopInterval: null,
             timesPlayed: 0,
+            // context: new (window.AudioContext || window.webkitAudioContext)(),
             context: null,
             static: null
         }
-        
+
         this.getUserPlaylists();
         this.onReady = this.onReady.bind(this);
         this.onPlayVideo = this.onPlayVideo.bind(this);
@@ -61,12 +62,15 @@ class MixtapePlayer extends React.Component {
         this.checkVid = this.checkVid.bind(this);
         this.tapeRefresh = this.tapeRefresh.bind(this);
         this.onToggleShareLink = this.onToggleShareLink.bind(this);
-        this.onFilter = this.onFilter.bind(this);
+        // this.onFilter = this.onFilter.bind(this);
         this.onTrackEnd = this.onTrackEnd.bind(this);
         this.distortTape = this.distortTape.bind(this);
         this.getStatic = this.getStatic.bind(this);
-        this.init = this.init.bind(this);
-        
+        // this.init = this.init.bind(this);
+        this.onloaded = this.onloaded.bind(this);
+
+
+
         this.divStyle = {
             borderRadius: '5px',
             marginTop: '-360px'
@@ -78,18 +82,12 @@ class MixtapePlayer extends React.Component {
 
     componentWillMount() {
         // window.addEventListener('load', init, false);
+        this.init();
+        this.loadShared();
 
-       
-
-        this.loadShared()
-        this.getStatic()
         if(this.state.googleId !== null){
             this.getUserPlaylists();
         }
-    }
-
-    componentDidMount(){        
-        this.init();
     }
 
     /**
@@ -159,23 +157,23 @@ class MixtapePlayer extends React.Component {
             })
     }
 
-    init() {
-        console.log(this);
+    init () {
         try {
             // Fix up for prefixing
-            AudioContext = window.AudioContext || window.webkitAudioContext;
-            this.state.context = new AudioContext();
-
+            // window.AudioContext = new (window.AudioContext || window.webkitAudioContext);
+            this.setState({
+                context: new (window.AudioContext || window.webkitAudioContext),
+            });
+            this.getStatic();
         } catch (e) {
             alert(`Web Audio API is not supported in this browser: ${e}`);
         }
     }
 
     getStatic() {
-        const { context } = this.state;
-
+        // const { context } = this.state;
         function reqListener () {
-            console.log(this.responseText);
+            console.log(this.response);
         }
 
         const oReq = new XMLHttpRequest();
@@ -184,42 +182,54 @@ class MixtapePlayer extends React.Component {
         oReq.open("GET", "/soundfiles/?file=static", true);
         oReq.responseType = 'arraybuffer';
 
+        
         // Decode asynchronously
-        oReq.onload = function() {
-            context.decodeAudioData(oReq.response, function(buffer) {
-                this.setState({
-                    static: buffer,
-                });
-                this.onFilter();
-            }, ()=> console.log(err));
-        }
+        oReq.onload = () => this.onloaded(oReq);
 
         oReq.send();
 
     }
 
-    onFilter(buffer) {
-        // let audioContext = new AudioContext();
-        const { context } = this.state;
+    onloaded(oReq) {
+        console.log('res', oReq.response)
+        const { context, source } = this.state;
+        // console.log(context);
+        
+        this.setState({
+            source: context.createBufferSource(),
+        });
 
-        const source = context.createBufferSource();
-        source.buffer = buffer;
+        context.decodeAudioData(oReq.response, (buffer) => {
+            console.log('filter called', buffer)
+            
+            // const { context } = this.state;
 
-        source.connect(context.destination);
-        // the context's destination (the speakers)
-        source.start(0);   
+            source.buffer = buffer;
 
-        // var oscillator = context.createOscillator();
-        // var filter = audioContext.createBiquadFilter;
-
-        // oscillator.connect(context.destination);
-        // this.setState({
-            // oscillator: oscillator,
-        // })
-        // this.distortTape()
-        console.log('filter called')
-
+            source.connect(context.destination);
+            // the context's destination (the speakers)
+            // source.start(0);   
+    
+            // this.setState({
+            //     static: buffer,
+            // });
+            // this.onFilter(buffer, source);
+        }, (err) => console.log('x marks the spot', err));
     }
+
+    // onFilter(buffer, source) {
+    //     // let audioContext = new AudioContext();
+    //     console.log('filter called', buffer)
+    //     const { context } = this.state;
+
+    //     source.buffer = buffer;
+
+    //     source.connect(context.destination);
+    //     // the context's destination (the speakers)
+    //     source.start(0);   
+        
+
+    // }
 
     /**
      * Function retrieves the shared playlist from the database by querying
@@ -289,8 +299,6 @@ class MixtapePlayer extends React.Component {
                             aSideOpts: aOpts,
                         })
                     }
-                    // this.state.player.playVideo(); 
-
                 })
                 .catch((error) => {
                     // handle error
